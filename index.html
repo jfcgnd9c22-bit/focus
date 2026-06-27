@@ -7,6 +7,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>集中キーパー｜画面オフで積む</title>
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
 <style>
   :root{
     --ink:#0E1719; --ink-2:#13211F; --surface:#172826; --surface-2:#1d322f;
@@ -49,11 +51,21 @@
   .custom-row input{flex:1;background:var(--surface);border:1px solid var(--line);border-radius:12px;color:var(--text);font-size:16px;padding:13px 14px;font-family:inherit}
   .custom-row input:focus{outline:none;border-color:var(--jade)}
   .custom-row span{font-size:13px;color:var(--muted)}
-  .tag-input{width:100%;background:var(--surface);border:1px solid var(--line);border-radius:12px;color:var(--text);font-size:15px;padding:13px 14px;font-family:inherit}
+  .tag-input{width:100%;background:var(--surface);border:1px solid var(--line);border-radius:12px;color:var(--text);font-size:15px;padding:13px 44px 13px 14px;font-family:inherit}
   .tag-input:focus{outline:none;border-color:var(--jade)}
-  .tag-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
-  .tag-chip{font-size:12px;padding:6px 12px;border-radius:999px;background:var(--surface-2);border:1px solid var(--line);color:var(--muted)}
-  .tag-chip:active{border-color:var(--jade);color:var(--jade)}
+  .tag-field{position:relative}
+  .tag-toggle{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:38px;height:38px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px;border-radius:10px;transition:.2s}
+  .tag-toggle.open{transform:translateY(-50%) rotate(180deg);color:var(--jade)}
+  .tag-toggle:active{background:var(--surface-2)}
+  .tag-dropdown{display:none;margin-top:8px;background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .tag-dropdown.open{display:block}
+  .tag-drop-empty{padding:14px;font-size:12px;color:var(--muted-2);text-align:center}
+  .tag-drop-row{display:flex;align-items:center;border-bottom:1px solid var(--line)}
+  .tag-drop-row:last-child{border-bottom:none}
+  .tag-drop-name{flex:1;text-align:left;padding:13px 14px;font-size:14px;color:var(--text)}
+  .tag-drop-name:active{background:var(--surface-2);color:var(--jade)}
+  .tag-drop-del{width:42px;padding:13px 0;font-size:15px;color:var(--muted-2)}
+  .tag-drop-del:active{color:var(--danger)}
   .how{margin-top:18px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px;font-size:12px;color:var(--muted);line-height:1.8}
   .how b{color:var(--jade);font-weight:700}
   .primary{width:100%;margin-top:22px;background:var(--jade);color:#082019;font-size:16px;font-weight:800;letter-spacing:.04em;padding:17px;border-radius:14px;transition:.15s}
@@ -182,8 +194,11 @@
         <span>分</span>
       </div>
       <div class="block-label">タグ（任意）</div>
-      <input id="tagInput" class="tag-input" type="text" maxlength="20" placeholder="例：ブログ執筆・読書・事務">
-      <div class="tag-chips" id="tagChips"></div>
+      <div class="tag-field">
+        <input id="tagInput" class="tag-input" type="text" maxlength="20" placeholder="例：ブログ執筆・読書・事務">
+        <button class="tag-toggle" id="tagToggle" type="button" aria-label="過去のタグ">▾</button>
+      </div>
+      <div class="tag-dropdown" id="tagDropdown"></div>
       <div class="how">
         はじめたら<b>スマホをロックして画面を消す</b>と、その時間が純集中として積み上がります。画面を起こして見ている間は一時停止＋脱線として記録。目標ぶん積み上がれば完了です。
       </div>
@@ -348,13 +363,32 @@ let selectedMin=25;
 let visTickId=null;
 
 /* ---- setup ---- */
-function renderTagChips(){
-  const wrap=$("#tagChips"); wrap.innerHTML="";
-  (store.settings.lastTags||[]).slice(0,5).forEach(tag=>{
-    const b=document.createElement("button"); b.className="tag-chip"; b.textContent=tag;
-    b.onclick=()=>{ $("#tagInput").value=tag; }; wrap.appendChild(b);
+function renderTagDropdown(){
+  const dd=$("#tagDropdown"); dd.innerHTML="";
+  const tags=store.settings.lastTags||[];
+  if(tags.length===0){
+    dd.innerHTML='<div class="tag-drop-empty">使ったタグがここに記録されます</div>';
+    return;
+  }
+  tags.forEach(tag=>{
+    const row=document.createElement("div"); row.className="tag-drop-row";
+    const name=document.createElement("button"); name.type="button"; name.className="tag-drop-name"; name.textContent=tag;
+    name.onclick=()=>{ $("#tagInput").value=tag; closeTagDropdown(); };
+    const del=document.createElement("button"); del.type="button"; del.className="tag-drop-del"; del.textContent="×"; del.setAttribute("aria-label","削除");
+    del.onclick=(e)=>{ e.stopPropagation(); store.settings.lastTags=(store.settings.lastTags||[]).filter(t=>t!==tag); save(); renderTagDropdown(); };
+    row.appendChild(name); row.appendChild(del); dd.appendChild(row);
   });
 }
+function openTagDropdown(){ renderTagDropdown(); $("#tagDropdown").classList.add("open"); $("#tagToggle").classList.add("open"); }
+function closeTagDropdown(){ $("#tagDropdown").classList.remove("open"); $("#tagToggle").classList.remove("open"); }
+$("#tagToggle").addEventListener("click",()=>{
+  if($("#tagDropdown").classList.contains("open")) closeTagDropdown(); else openTagDropdown();
+});
+document.addEventListener("click",(e)=>{
+  if(!$("#tagDropdown").classList.contains("open")) return;
+  if(e.target.closest(".tag-field")||e.target.closest("#tagDropdown")) return;
+  closeTagDropdown();
+});
 $("#presets").addEventListener("click",e=>{
   const p=e.target.closest(".preset"); if(!p) return;
   document.querySelectorAll(".preset").forEach(x=>x.classList.remove("sel"));
@@ -382,7 +416,7 @@ $("#startBtn").addEventListener("click",()=>{
   const tag=$("#tagInput").value.trim();
   S={ id:Date.now(), startedAt:Date.now(), plannedSec:min*60, tag, lapses:[], focusedSec:0, started:false };
   store.settings.lastDuration=min*60;
-  if(tag) store.settings.lastTags=[tag,...(store.settings.lastTags||[]).filter(t=>t!==tag)].slice(0,6);
+  if(tag) store.settings.lastTags=[tag,...(store.settings.lastTags||[]).filter(t=>t!==tag)].slice(0,20);
   phase="armed"; focusChunkStart=null; touchStart=null; lastFocusChunk=null;
   enterActiveScreen(); updateActiveUI(); persistActive();
 });
@@ -675,7 +709,7 @@ function restoreActive(){
   const pbtn=[...document.querySelectorAll(".preset")].find(p=>parseInt(p.dataset.min,10)===lastMin);
   if(pbtn){ document.querySelectorAll(".preset").forEach(x=>x.classList.remove("sel")); pbtn.classList.add("sel"); selectedMin=lastMin; }
   else { selectedMin=lastMin; document.querySelectorAll(".preset").forEach(x=>x.classList.remove("sel")); $("#customMin").value=lastMin; }
-  renderTagChips(); renderStats();
+  renderTagDropdown(); renderStats();
   restoreActive();
 })();
 </script>
