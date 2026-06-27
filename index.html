@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0E1719">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>集中キーパー｜画面オフで積む</title>
+<style>
+  :root{
+    --ink:#0E1719; --ink-2:#13211F; --surface:#172826; --surface-2:#1d322f;
+    --line:#2a403d; --jade:#5FD0A8; --jade-dim:#3a8c72;
+    --amber:#E8A24B; --amber-dim:#9a6d33;
+    --text:#E9F1EF; --muted:#86a09b; --muted-2:#5d7570; --danger:#c96b5a;
+    --tab-h: calc(60px + env(safe-area-inset-bottom));
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    background:var(--ink);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Noto Sans JP","Segoe UI",sans-serif;
+    line-height:1.55;overflow-x:hidden;-webkit-font-smoothing:antialiased;
+    background-image:radial-gradient(120% 60% at 50% -10%, #16302b 0%, var(--ink) 55%);
+  }
+  .mono{font-family:ui-monospace,"SF Mono","Roboto Mono","Menlo",monospace;font-variant-numeric:tabular-nums}
+  .eyebrow{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted-2);font-weight:700}
+  button{font-family:inherit;cursor:pointer;border:none;color:inherit;background:none}
+  .app{max-width:480px;margin:0 auto;min-height:100%;padding:0 20px calc(var(--tab-h) + 16px);position:relative}
+
+  header{padding:max(24px,env(safe-area-inset-top)) 0 12px;display:flex;align-items:baseline;justify-content:space-between}
+  header h1{font-size:17px;font-weight:800;letter-spacing:.02em}
+  header h1 .dot{color:var(--jade)}
+  header .sub{font-size:11px;color:var(--muted-2);letter-spacing:.05em}
+
+  .view{display:none;animation:fade .35s ease}
+  .view.active{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+  /* setup */
+  .block-label{font-size:12px;color:var(--muted);margin:22px 2px 10px;letter-spacing:.04em}
+  .presets{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  .preset{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 0;text-align:center;transition:.18s}
+  .preset .n{font-size:22px;font-weight:800}
+  .preset .u{font-size:10px;color:var(--muted);letter-spacing:.1em}
+  .preset.sel{border-color:var(--jade);background:linear-gradient(180deg,#1c3531,#162825);box-shadow:0 0 0 1px var(--jade) inset}
+  .preset.sel .n{color:var(--jade)}
+  .custom-row{display:flex;align-items:center;gap:10px;margin-top:10px}
+  .custom-row input{flex:1;background:var(--surface);border:1px solid var(--line);border-radius:12px;color:var(--text);font-size:16px;padding:13px 14px;font-family:inherit}
+  .custom-row input:focus{outline:none;border-color:var(--jade)}
+  .custom-row span{font-size:13px;color:var(--muted)}
+  .tag-input{width:100%;background:var(--surface);border:1px solid var(--line);border-radius:12px;color:var(--text);font-size:15px;padding:13px 14px;font-family:inherit}
+  .tag-input:focus{outline:none;border-color:var(--jade)}
+  .tag-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  .tag-chip{font-size:12px;padding:6px 12px;border-radius:999px;background:var(--surface-2);border:1px solid var(--line);color:var(--muted)}
+  .tag-chip:active{border-color:var(--jade);color:var(--jade)}
+  .how{margin-top:18px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px;font-size:12px;color:var(--muted);line-height:1.8}
+  .how b{color:var(--jade);font-weight:700}
+  .primary{width:100%;margin-top:22px;background:var(--jade);color:#082019;font-size:16px;font-weight:800;letter-spacing:.04em;padding:17px;border-radius:14px;transition:.15s}
+  .primary:active{transform:scale(.985);filter:brightness(1.05)}
+
+  /* active */
+  .active-wrap{padding-top:8px;text-align:center}
+  .state-label{margin-top:10px;height:24px}
+  .state-focus .eyebrow{color:var(--jade)}
+  .state-touch .eyebrow{color:var(--amber)}
+  .session-tag{font-size:12px;color:var(--muted);margin-top:2px;min-height:16px}
+  .ring-wrap{position:relative;width:min(76vw,290px);margin:14px auto 0;aspect-ratio:1}
+  #ringSvg{width:100%;height:100%;transform:rotate(-90deg)}
+  .ring-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .big-time{font-size:clamp(38px,12vw,54px);font-weight:700;letter-spacing:.01em}
+  .ring-sub{font-size:12px;color:var(--muted-2);margin-top:2px}
+  .leak{font-size:13px;color:var(--amber);margin-top:6px;min-height:18px;font-weight:600}
+
+  .live-chips{display:flex;justify-content:center;gap:10px;margin-top:20px}
+  .chip{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 16px;min-width:96px}
+  .chip .k{font-size:10px;color:var(--muted-2);letter-spacing:.12em;text-transform:uppercase}
+  .chip .v{font-size:20px;font-weight:800;margin-top:1px}
+  .chip .v small{font-size:12px;color:var(--muted);font-weight:600}
+
+  .lock-cue{margin-top:24px;background:linear-gradient(180deg,#1c3531,#162825);border:1px solid var(--jade-dim);border-radius:16px;padding:18px;display:flex;align-items:center;gap:14px;justify-content:center}
+  .lock-cue .ico{font-size:24px}
+  .lock-cue .t{font-size:15px;font-weight:800;color:var(--jade)}
+  .lock-cue .s{font-size:11px;color:var(--muted);margin-top:2px}
+  .reclass{display:block;width:100%;margin-top:12px;padding:13px;border-radius:13px;font-size:13px;font-weight:700;color:var(--amber);background:rgba(232,162,75,.1);border:1px solid var(--amber-dim)}
+  .reclass small{display:block;font-weight:500;color:var(--muted);margin-top:2px}
+  .reclass:active{transform:scale(.99)}
+  .abort{display:block;margin:14px auto 0;font-size:13px;color:var(--muted-2);padding:8px 16px;letter-spacing:.05em}
+  .abort:active{color:var(--danger)}
+
+  /* complete */
+  .done{padding-top:18px;text-align:center}
+  .done-rate{font-size:62px;font-weight:800;line-height:1;margin-top:8px}
+  .done-rate small{font-size:22px;color:var(--muted)}
+  .done-msg{font-size:14px;color:var(--muted);margin:14px 24px 0;line-height:1.7}
+  .done-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:26px}
+  .ds{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 6px}
+  .ds .v{font-size:22px;font-weight:800}
+  .ds .k{font-size:10px;color:var(--muted-2);letter-spacing:.08em;margin-top:2px}
+  .done .secondary{width:100%;margin-top:14px;background:var(--surface);border:1px solid var(--line);color:var(--text);padding:15px;border-radius:14px;font-size:15px;font-weight:700}
+
+  /* dashboard */
+  .summary{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:6px}
+  .sum{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px 10px;text-align:center}
+  .sum .v{font-size:24px;font-weight:800}
+  .sum .v.streak{color:var(--amber)}
+  .sum .v.rate{color:var(--jade)}
+  .sum .k{font-size:10px;color:var(--muted-2);letter-spacing:.06em;margin-top:3px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px 16px;margin-top:16px}
+  .card h3{font-size:13px;font-weight:700;letter-spacing:.03em;display:flex;justify-content:space-between;align-items:center}
+  .card h3 span{font-size:11px;color:var(--muted-2);font-weight:600;letter-spacing:.04em}
+  .chart{margin-top:14px}
+  .chart svg{width:100%;display:block;overflow:visible}
+  .legend{display:flex;gap:14px;margin-top:10px;font-size:11px;color:var(--muted)}
+  .legend i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+  .hist{margin-top:6px}
+  .hrow{display:flex;align-items:center;gap:12px;padding:13px 2px;border-bottom:1px solid var(--line)}
+  .hrow:last-child{border-bottom:none}
+  .hdot{width:10px;height:10px;border-radius:50%;flex:none}
+  .hmain{flex:1;min-width:0}
+  .hmain .t{font-size:14px;font-weight:600}
+  .hmain .s{font-size:11px;color:var(--muted-2);margin-top:1px}
+  .hrate{font-size:18px;font-weight:800;font-variant-numeric:tabular-nums}
+  .empty{text-align:center;color:var(--muted-2);font-size:13px;padding:40px 20px;line-height:1.8}
+  details.settings{margin-top:18px;border:1px solid var(--line);border-radius:14px;background:var(--surface);overflow:hidden}
+  details.settings summary{padding:15px 16px;font-size:13px;font-weight:700;color:var(--muted);list-style:none;cursor:pointer;display:flex;justify-content:space-between}
+  details.settings summary::-webkit-details-marker{display:none}
+  details[open].settings summary{border-bottom:1px solid var(--line)}
+  .set-body{padding:16px}
+  .set-note{font-size:11px;color:var(--muted-2);line-height:1.8}
+  .clear-btn{width:100%;margin-top:16px;padding:13px;border-radius:11px;font-size:13px;font-weight:700;color:var(--danger);border:1px solid var(--amber-dim);background:transparent}
+
+  .tabbar{position:fixed;left:0;right:0;bottom:0;height:var(--tab-h);background:rgba(14,23,25,.88);backdrop-filter:blur(14px);border-top:1px solid var(--line);display:flex;padding-bottom:env(safe-area-inset-bottom);z-index:30}
+  .tabbar.hidden{transform:translateY(110%);transition:.3s}
+  .tabbar button{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--muted-2);font-size:10px;letter-spacing:.08em;font-weight:700}
+  .tabbar button.on{color:var(--jade)}
+  .tabbar svg{width:22px;height:22px}
+
+  .modal-bg{position:fixed;inset:0;background:rgba(5,10,10,.72);backdrop-filter:blur(4px);display:none;align-items:flex-end;justify-content:center;z-index:50;padding:20px}
+  .modal-bg.show{display:flex}
+  .modal{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:22px;width:100%;max-width:440px;animation:up .25s ease}
+  @keyframes up{from{transform:translateY(20px);opacity:0}to{transform:none;opacity:1}}
+  .modal h2{font-size:17px;font-weight:800;text-align:center}
+  .modal p{font-size:13px;color:var(--muted);text-align:center;margin-top:8px;line-height:1.7}
+  .modal-actions{display:grid;gap:10px;margin-top:20px;grid-template-columns:1fr 1fr}
+  .mbtn{padding:15px;border-radius:13px;font-size:14px;font-weight:700;border:1px solid var(--line);background:var(--ink-2);color:var(--text)}
+  .mbtn.warn{background:rgba(232,162,75,.12);border-color:var(--amber-dim);color:var(--amber)}
+  .mbtn.ghost{background:transparent;color:var(--muted)}
+  .mbtn.go{background:var(--jade);color:#082019;border-color:var(--jade)}
+  .set-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .set-btn{padding:13px;border-radius:11px;font-size:13px;font-weight:700;border:1px solid var(--line);background:var(--ink-2);color:var(--text)}
+  .set-btn:active{border-color:var(--jade);color:var(--jade)}
+  .data-area{width:100%;height:120px;margin-top:14px;background:var(--ink-2);border:1px solid var(--line);border-radius:12px;color:var(--text);font-family:ui-monospace,"SF Mono",monospace;font-size:11px;padding:12px;resize:none}
+  .data-area:focus{outline:none;border-color:var(--jade)}
+  .toast{position:fixed;bottom:calc(var(--tab-h) + 16px);left:50%;transform:translateX(-50%) translateY(20px);background:var(--surface-2);border:1px solid var(--line);color:var(--text);padding:12px 18px;border-radius:12px;font-size:13px;opacity:0;transition:.25s;z-index:60;pointer-events:none}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  @media (prefers-reduced-motion: reduce){.view{animation:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div>
+      <h1>集中キーパー<span class="dot">.</span></h1>
+      <div class="sub">画面を消した時間が、集中になる</div>
+    </div>
+    <div class="eyebrow" id="hdrStreak"></div>
+  </header>
+
+  <!-- TIMER -->
+  <section class="view active" id="timerView">
+    <div id="setup">
+      <div class="block-label">純集中の目標時間</div>
+      <div class="presets" id="presets">
+        <button class="preset" data-min="15"><div class="n">15</div><div class="u">MIN</div></button>
+        <button class="preset sel" data-min="25"><div class="n">25</div><div class="u">MIN</div></button>
+        <button class="preset" data-min="45"><div class="n">45</div><div class="u">MIN</div></button>
+        <button class="preset" data-min="60"><div class="n">60</div><div class="u">MIN</div></button>
+      </div>
+      <div class="custom-row">
+        <input id="customMin" type="number" inputmode="numeric" min="1" max="240" placeholder="自由に分を入力">
+        <span>分</span>
+      </div>
+      <div class="block-label">タグ（任意）</div>
+      <input id="tagInput" class="tag-input" type="text" maxlength="20" placeholder="例：ブログ執筆・読書・事務">
+      <div class="tag-chips" id="tagChips"></div>
+      <div class="how">
+        はじめたら<b>スマホをロックして画面を消す</b>と、その時間が純集中として積み上がります。画面を起こして見ている間は一時停止＋脱線として記録。目標ぶん積み上がれば完了です。
+      </div>
+      <button class="primary" id="startBtn">集中をはじめる</button>
+    </div>
+
+    <div id="active" class="active-wrap" style="display:none">
+      <div class="state-label state-focus" id="stateLabel"><div class="eyebrow" id="stateText">集中の準備</div></div>
+      <div class="session-tag" id="activeTag"></div>
+      <div class="ring-wrap">
+        <svg id="ringSvg" viewBox="0 0 240 240">
+          <circle cx="120" cy="120" r="108" fill="none" stroke="var(--line)" stroke-width="11"/>
+          <circle id="focusArc" cx="120" cy="120" r="108" fill="none" stroke="var(--jade)" stroke-width="11" stroke-linecap="round" stroke-dasharray="679" stroke-dashoffset="679"/>
+        </svg>
+        <div class="ring-center">
+          <div class="big-time mono" id="bigTime">25:00</div>
+          <div class="ring-sub" id="ringSub">残りの純集中</div>
+        </div>
+      </div>
+      <div class="leak mono" id="leakTimer"></div>
+      <div class="live-chips">
+        <div class="chip"><div class="k">脱線</div><div class="v mono" id="chipCount">0<small>回</small></div></div>
+        <div class="chip"><div class="k">脱線時間</div><div class="v mono" id="chipTime">0<small>秒</small></div></div>
+      </div>
+      <div class="lock-cue" id="lockCue">
+        <span class="ico" id="cueIco">📵</span>
+        <div style="text-align:left">
+          <div class="t" id="cueTitle">画面を消すと集中スタート</div>
+          <div class="s" id="cueSub">スマホをロックしてください</div>
+        </div>
+      </div>
+      <button class="reclass" id="reclassBtn" style="display:none">📱 さっきはスマホを見てた<small>直前の集中を脱線として記録します</small></button>
+      <button class="abort" id="abortBtn">セッションを中止</button>
+    </div>
+
+    <div id="complete" class="done" style="display:none">
+      <div class="eyebrow">セッション完了</div>
+      <div class="done-rate mono"><span id="doneRate">100</span><small>%</small></div>
+      <div class="eyebrow" style="color:var(--muted)">我慢できた率</div>
+      <div class="done-msg" id="doneMsg"></div>
+      <div class="done-stats">
+        <div class="ds"><div class="v mono" id="dsFocus">25:00</div><div class="k">純集中</div></div>
+        <div class="ds"><div class="v mono" id="dsCount">0</div><div class="k">脱線回数</div></div>
+        <div class="ds"><div class="v mono" id="dsLapse">0:00</div><div class="k">脱線時間</div></div>
+      </div>
+      <button class="primary" id="againBtn" style="margin-top:24px">もう一度はじめる</button>
+      <button class="secondary" id="toStatsBtn">記録を見る</button>
+    </div>
+  </section>
+
+  <!-- STATS -->
+  <section class="view" id="statsView">
+    <div class="summary">
+      <div class="sum"><div class="v rate" id="sumRate">–</div><div class="k">平均 我慢率</div></div>
+      <div class="sum"><div class="v" id="sumFocus">–</div><div class="k">累計 純集中</div></div>
+      <div class="sum"><div class="v streak" id="sumStreak">0</div><div class="k">連続クリーン</div></div>
+    </div>
+    <div id="hasData">
+      <div class="card"><h3>日別の我慢できた率<span>直近14日</span></h3><div class="chart" id="chartRate"></div></div>
+      <div class="card"><h3>日別の脱線回数<span>直近14日</span></h3><div class="chart" id="chartCount"></div></div>
+      <div class="card"><h3>時間帯別の脱線<span>弱い時間を知る</span></h3><div class="chart" id="chartHour"></div></div>
+      <div class="card"><h3>履歴<span id="histCount"></span></h3><div class="hist" id="histList"></div></div>
+    </div>
+    <div id="noData" class="empty" style="display:none">
+      まだ記録がありません。<br>1セッション走り切ると、ここに我慢率の推移が積み上がります。
+    </div>
+    <details class="settings">
+      <summary>仕組みと設定 <span style="color:var(--muted-2)">▾</span></summary>
+      <div class="set-body">
+        <div class="set-label" style="font-size:12px;color:var(--muted);margin-bottom:10px">データのバックアップ</div>
+        <div class="set-row">
+          <button class="set-btn" id="exportBtn">⬆ エクスポート</button>
+          <button class="set-btn" id="importBtn">⬇ インポート</button>
+        </div>
+        <div class="set-note" style="margin-top:12px">
+          記録はこの端末内（localStorage）にのみ保存されます。引っ越しや念のための保険として、エクスポートしたJSONをメモやiCloud Driveに保管しておくと安心です。新しいURLでもインポートで記録ごと移せます。<br><br>
+          画面オフ（＝アプリがバックグラウンド）の時間を純集中としてカウントします。ブラウザは画面の電源を直接読めないため、「画面オフ」と「他アプリへの切替」は区別できません。起こして他アプリを開いたぶんが集中に混ざった場合は、戻ったときに「さっきはスマホを見てた」で脱線へ修正できます。
+        </div>
+        <button class="clear-btn" id="clearBtn">すべての記録を消去</button>
+      </div>
+    </details>
+  </section>
+</div>
+
+<nav class="tabbar" id="tabbar">
+  <button class="on" data-tab="timer">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6M12 5V2" stroke-linecap="round"/></svg>
+    タイマー
+  </button>
+  <button data-tab="stats">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+    記録
+  </button>
+</nav>
+
+<div class="modal-bg" id="abortModal">
+  <div class="modal">
+    <h2>中止しますか？</h2>
+    <p>このセッションは記録に保存されません。</p>
+    <div class="modal-actions">
+      <button class="mbtn ghost" id="abortCancel">続ける</button>
+      <button class="mbtn warn" id="abortConfirm">中止する</button>
+    </div>
+  </div>
+</div>
+<div class="modal-bg" id="exportModal">
+  <div class="modal">
+    <h2>データのバックアップ</h2>
+    <p>このテキストをコピーして保存するか、ファイルとして書き出してください。</p>
+    <textarea id="exportText" class="data-area" readonly></textarea>
+    <div class="modal-actions">
+      <button class="mbtn" id="exportCopy">コピー</button>
+      <button class="mbtn go" id="exportShare">ファイルに保存</button>
+    </div>
+    <button class="mbtn ghost" id="exportClose" style="margin-top:10px;width:100%">閉じる</button>
+  </div>
+</div>
+<div class="modal-bg" id="importModal">
+  <div class="modal">
+    <h2>バックアップから復元</h2>
+    <p>バックアップのJSONを貼り付けるか、ファイルを選んでください。今ある記録と統合します（重複は自動でまとめます）。</p>
+    <textarea id="importText" class="data-area" placeholder="ここにJSONを貼り付け"></textarea>
+    <input type="file" id="importFile" accept="application/json,.json" style="font-size:12px;color:var(--muted);margin-top:12px;width:100%">
+    <div class="modal-actions" style="margin-top:14px">
+      <button class="mbtn ghost" id="importCancel">キャンセル</button>
+      <button class="mbtn go" id="importDo">読み込む</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+const KEY="focuskeeper_v2";
+const $=s=>document.querySelector(s);
+const GLANCE=2; // seconds: shorter glances aren't counted as a lapse
+
+function load(){
+  try{ const d=JSON.parse(localStorage.getItem(KEY)); if(d&&d.sessions) return d; }catch(e){}
+  return { sessions:[], settings:{ lastDuration:1500, lastTags:[] }, active:null };
+}
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(store)); }catch(e){} }
+let store=load();
+
+const pad=n=>String(n).padStart(2,"0");
+function mmss(sec){ sec=Math.max(0,Math.round(sec)); return pad(Math.floor(sec/60))+":"+pad(sec%60); }
+function humanDur(sec){ sec=Math.round(sec); if(sec<60) return sec+"秒"; const m=Math.floor(sec/60),s=sec%60; if(m<60) return s?m+"分"+s+"秒":m+"分"; const h=Math.floor(m/60); return h+"時間"+(m%60)+"分"; }
+function dayKey(ts){ const d=new Date(ts); return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
+function rateColor(r){ return r>=80?"var(--jade)":r>=50?"var(--amber)":"var(--danger)"; }
+let toastTimer;
+function toast(m){ const t=$("#toast"); t.textContent=m; t.classList.add("show"); clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove("show"),2200); }
+
+const RING_C=2*Math.PI*108;
+$("#focusArc").setAttribute("stroke-dasharray",RING_C.toFixed(1));
+
+let S=null;
+let phase="idle";            // idle | armed | focusing | touching | done
+let focusChunkStart=null;    // ms, when current screen-off chunk began
+let touchStart=null;         // ms, when current screen-on period began
+let lastFocusChunk=null;     // {start,dur} for reclassify backstop
+let selectedMin=25;
+let visTickId=null;
+
+/* ---- setup ---- */
+function renderTagChips(){
+  const wrap=$("#tagChips"); wrap.innerHTML="";
+  (store.settings.lastTags||[]).slice(0,5).forEach(tag=>{
+    const b=document.createElement("button"); b.className="tag-chip"; b.textContent=tag;
+    b.onclick=()=>{ $("#tagInput").value=tag; }; wrap.appendChild(b);
+  });
+}
+$("#presets").addEventListener("click",e=>{
+  const p=e.target.closest(".preset"); if(!p) return;
+  document.querySelectorAll(".preset").forEach(x=>x.classList.remove("sel"));
+  p.classList.add("sel"); selectedMin=parseInt(p.dataset.min,10); $("#customMin").value="";
+});
+$("#customMin").addEventListener("input",e=>{
+  const v=parseInt(e.target.value,10);
+  if(v>0){ document.querySelectorAll(".preset").forEach(x=>x.classList.remove("sel")); selectedMin=Math.min(v,240); }
+});
+
+/* ---- persistence of live session ---- */
+function persistActive(){
+  if(!S){ store.active=null; save(); return; }
+  store.active={ id:S.id, startedAt:S.startedAt, plannedSec:S.plannedSec, tag:S.tag,
+    lapses:S.lapses, focusedSec:S.focusedSec, started:S.started,
+    phase, focusChunkStart, touchStart, lastFocusChunk };
+  save();
+}
+function clearActive(){ store.active=null; save(); }
+
+/* ---- start ---- */
+$("#startBtn").addEventListener("click",()=>{
+  const cm=parseInt($("#customMin").value,10);
+  const min=(cm>0)?Math.min(cm,240):selectedMin;
+  const tag=$("#tagInput").value.trim();
+  S={ id:Date.now(), startedAt:Date.now(), plannedSec:min*60, tag, lapses:[], focusedSec:0, started:false };
+  store.settings.lastDuration=min*60;
+  if(tag) store.settings.lastTags=[tag,...(store.settings.lastTags||[]).filter(t=>t!==tag)].slice(0,6);
+  phase="armed"; focusChunkStart=null; touchStart=null; lastFocusChunk=null;
+  enterActiveScreen(); updateActiveUI(); persistActive();
+});
+
+function enterActiveScreen(){
+  $("#setup").style.display="none"; $("#complete").style.display="none";
+  $("#active").style.display="block"; $("#tabbar").classList.add("hidden");
+}
+
+/* ---- visibility = the core mechanic ---- */
+document.addEventListener("visibilitychange",()=>{
+  if(!S||phase==="done"||phase==="idle") return;
+  if(document.hidden) becameHidden(); else becameVisible();
+});
+
+function becameHidden(){
+  const now=Date.now();
+  if(phase==="touching" && touchStart!=null){
+    const dur=(now-touchStart)/1000;
+    if(S.started && dur>=GLANCE) S.lapses.push({ start:touchStart, durationSec:dur });
+    touchStart=null;
+  }
+  if(phase==="armed"||phase==="touching"){
+    phase="focusing"; S.started=true; focusChunkStart=now; lastFocusChunk=null;
+    stopVisTick(); persistActive();
+  }
+}
+function becameVisible(){
+  if(phase!=="focusing"||focusChunkStart==null) return;
+  const now=Date.now();
+  const dur=(now-focusChunkStart)/1000;
+  const need=S.plannedSec-S.focusedSec;
+  if(dur>=need){
+    S.focusedSec=S.plannedSec; focusChunkStart=null; lastFocusChunk=null;
+    finish(); return;
+  }
+  S.focusedSec+=dur;
+  lastFocusChunk={ start:focusChunkStart, dur };
+  focusChunkStart=null; phase="touching"; touchStart=now;
+  startVisTick(); updateActiveUI(); persistActive();
+}
+
+/* ---- live tick while screen is ON (touching) ---- */
+function startVisTick(){ stopVisTick(); visTick(); visTickId=setInterval(visTick,250); }
+function stopVisTick(){ if(visTickId){ clearInterval(visTickId); visTickId=null; } }
+function visTick(){
+  if(phase!=="touching"||touchStart==null) return;
+  const sec=(Date.now()-touchStart)/1000;
+  $("#leakTimer").textContent="この画面を見ている "+mmss(sec);
+  const ongoing=(S.started&&sec>=GLANCE)?sec:0;
+  $("#chipCount").innerHTML=(S.lapses.length+(ongoing>0?1:0))+"<small>回</small>";
+  $("#chipTime").innerHTML=Math.round(S.lapses.reduce((a,l)=>a+l.durationSec,0)+ongoing)+"<small>秒</small>";
+}
+
+/* ---- UI ---- */
+function updateActiveUI(){
+  $("#activeTag").textContent=S.tag?"#"+S.tag:"";
+  const remaining=Math.max(0,S.plannedSec-S.focusedSec);
+  $("#bigTime").textContent=mmss(remaining);
+  $("#focusArc").setAttribute("stroke-dashoffset",(RING_C*(1-Math.min(1,S.focusedSec/S.plannedSec))).toFixed(1));
+  $("#chipCount").innerHTML=S.lapses.length+"<small>回</small>";
+  $("#chipTime").innerHTML=Math.round(S.lapses.reduce((a,l)=>a+l.durationSec,0))+"<small>秒</small>";
+
+  if(phase==="armed"){
+    $("#stateLabel").className="state-label state-focus"; $("#stateText").textContent="集中の準備";
+    $("#ringSub").textContent="目標の純集中"; $("#leakTimer").textContent="";
+    $("#cueIco").textContent="📵"; $("#cueTitle").textContent="画面を消すと集中スタート"; $("#cueSub").textContent="スマホをロックしてください";
+    $("#reclassBtn").style.display="none";
+  } else if(phase==="touching"){
+    $("#stateLabel").className="state-label state-touch"; $("#stateText").textContent="画面オン中・集中は一時停止";
+    $("#ringSub").textContent="残りの純集中";
+    $("#cueIco").textContent="📵"; $("#cueTitle").textContent="画面を消すと再開"; $("#cueSub").textContent="ロックすれば緑がまた進みます";
+    $("#reclassBtn").style.display=lastFocusChunk?"block":"none";
+  }
+}
+
+/* manual backstop: turn the last screen-off chunk into a lapse */
+$("#reclassBtn").addEventListener("click",()=>{
+  if(!lastFocusChunk) return;
+  S.focusedSec=Math.max(0,S.focusedSec-lastFocusChunk.dur);
+  S.lapses.push({ start:lastFocusChunk.start, durationSec:lastFocusChunk.dur, manual:true });
+  lastFocusChunk=null; updateActiveUI(); persistActive();
+  toast("直前の時間を脱線に変えました");
+});
+
+/* ---- finish ---- */
+function finish(){
+  if(phase==="done") return;
+  stopVisTick(); phase="done";
+  const totalLapse=S.lapses.reduce((a,l)=>a+l.durationSec,0);
+  const focused=Math.min(S.plannedSec,Math.round(S.focusedSec));
+  const denom=focused+totalLapse;
+  const rate=denom>0?Math.round(focused/denom*100):100;
+  const rec={ id:S.id, startedAt:S.startedAt, plannedSec:S.plannedSec, tag:S.tag,
+    lapseCount:S.lapses.length, totalLapseSec:Math.round(totalLapse),
+    focusedSec:focused, enduranceRate:rate,
+    lapses:S.lapses.map(l=>({ start:l.start, durationSec:Math.round(l.durationSec), manual:!!l.manual })) };
+  store.sessions.push(rec); clearActive(); save();
+  showComplete(rec);
+}
+function showComplete(rec){
+  $("#active").style.display="none"; $("#complete").style.display="block"; $("#tabbar").classList.remove("hidden");
+  const r=rec.enduranceRate, el=$("#doneRate");
+  el.textContent=r; el.parentElement.style.color=rateColor(r);
+  $("#dsFocus").textContent=mmss(rec.focusedSec);
+  $("#dsCount").textContent=rec.lapseCount;
+  $("#dsLapse").textContent=mmss(rec.totalLapseSec);
+  let msg;
+  if(rec.lapseCount===0) msg="完璧。一度も画面を起こさずに走り切りました。この静けさを覚えておきましょう。";
+  else if(r>=80) msg="ほぼ画面を消したまま集中をキープ。起こしても短くまとめられています。";
+  else if(r>=50) msg="半分以上は画面オフを守れています。次は起こす回数を1回減らすことだけ狙いましょう。";
+  else msg="今回は何度も画面に手が伸びましたね。目標を短く設定して、勝てる長さから立て直すのがおすすめです。";
+  $("#doneMsg").textContent=msg;
+  renderStats();
+}
+$("#againBtn").addEventListener("click",resetToSetup);
+$("#toStatsBtn").addEventListener("click",()=>{ resetToSetup(); switchTab("stats"); });
+function resetToSetup(){
+  S=null; phase="idle"; focusChunkStart=null; touchStart=null; lastFocusChunk=null; stopVisTick();
+  $("#complete").style.display="none"; $("#active").style.display="none"; $("#setup").style.display="block";
+  $("#tabbar").classList.remove("hidden");
+}
+
+/* ---- abort ---- */
+$("#abortBtn").addEventListener("click",()=>$("#abortModal").classList.add("show"));
+$("#abortCancel").addEventListener("click",()=>$("#abortModal").classList.remove("show"));
+$("#abortConfirm").addEventListener("click",()=>{
+  $("#abortModal").classList.remove("show"); stopVisTick();
+  S=null; phase="idle"; focusChunkStart=null; touchStart=null; lastFocusChunk=null; clearActive();
+  resetToSetup(); toast("中止しました（記録なし）");
+});
+
+/* ---- tabs ---- */
+function switchTab(name){
+  document.querySelectorAll(".tabbar button").forEach(b=>b.classList.toggle("on",b.dataset.tab===name));
+  $("#timerView").classList.toggle("active",name==="timer");
+  $("#statsView").classList.toggle("active",name==="stats");
+  if(name==="stats") renderStats();
+}
+document.querySelectorAll(".tabbar button").forEach(b=>{
+  b.addEventListener("click",()=>{
+    if(phase==="armed"||phase==="focusing"||phase==="touching"){ toast("セッション中はタブを切り替えできません"); return; }
+    switchTab(b.dataset.tab);
+  });
+});
+
+/* ---- stats ---- */
+function lastNDays(n){ const days=[]; const t=new Date(); t.setHours(0,0,0,0); for(let i=n-1;i>=0;i--){ const d=new Date(t); d.setDate(d.getDate()-i); days.push(d);} return days; }
+function svgBars(data,opts){
+  const W=100,H=opts.h||80,n=data.length,gap=1.4,bw=(W-gap*(n-1))/n;
+  const max=opts.max||Math.max(1,...data.map(d=>d.value));
+  let bars="";
+  data.forEach((d,i)=>{
+    const x=i*(bw+gap);
+    const has=d.value>0;
+    const bh=has?Math.max(1.5,(d.value/max)*(H-16)):2;
+    const y=H-16-bh;
+    bars+=`<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${bw.toFixed(2)}" height="${bh.toFixed(2)}" rx="${Math.min(2,bw/2).toFixed(2)}" fill="${has?d.color:'var(--line)'}" opacity="${has?1:.5}"/>`;
+    if(d.label!=null) bars+=`<text x="${(x+bw/2).toFixed(2)}" y="${H-4}" text-anchor="middle" font-size="5" fill="var(--muted-2)">${d.label}</text>`;
+  });
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="height:${H*1.6}px">${bars}</svg>`;
+}
+function cleanStreak(){ let n=0; for(let i=store.sessions.length-1;i>=0;i--){ if(store.sessions[i].lapseCount===0) n++; else break; } return n; }
+function renderStats(){
+  const ss=store.sessions;
+  const streak=cleanStreak();
+  $("#hdrStreak").textContent=streak>0?"🔥 "+streak:"";
+  if(ss.length===0){
+    $("#hasData").style.display="none"; $("#noData").style.display="block";
+    $("#sumRate").textContent="–"; $("#sumFocus").textContent="–"; $("#sumStreak").textContent="0"; return;
+  }
+  $("#hasData").style.display="block"; $("#noData").style.display="none";
+  const totFocus=ss.reduce((a,s)=>a+s.focusedSec,0);
+  const totLapse=ss.reduce((a,s)=>a+s.totalLapseSec,0);
+  const avg=Math.round(totFocus/Math.max(1,totFocus+totLapse)*100);
+  $("#sumRate").textContent=avg+"%"; $("#sumRate").style.color=rateColor(avg);
+  $("#sumFocus").textContent=humanDur(totFocus).replace("時間","h").replace("分","m");
+  $("#sumStreak").textContent=streak;
+
+  const days=lastNDays(14), byDay={};
+  ss.forEach(s=>{ const k=dayKey(s.startedAt); (byDay[k]=byDay[k]||[]).push(s); });
+
+  const rateData=days.map((d,i)=>{
+    const arr=byDay[dayKey(d.getTime())]||[]; let v=0;
+    if(arr.length){ const f=arr.reduce((a,s)=>a+s.focusedSec,0), l=arr.reduce((a,s)=>a+s.totalLapseSec,0); v=Math.round(f/Math.max(1,f+l)*100); }
+    return { value:v, color:rateColor(v||0), label:(i%2===0)?(d.getMonth()+1)+"/"+d.getDate():"" };
+  });
+  $("#chartRate").innerHTML=svgBars(rateData,{max:100})+`<div class="legend"><span><i style="background:var(--jade)"></i>80%+</span><span><i style="background:var(--amber)"></i>50-79%</span><span><i style="background:var(--danger)"></i>～49%</span></div>`;
+
+  const countData=days.map((d,i)=>{ const arr=byDay[dayKey(d.getTime())]||[]; const c=arr.reduce((a,s)=>a+s.lapseCount,0); return { value:c, color:"var(--amber)", label:(i%2===0)?(d.getMonth()+1)+"/"+d.getDate():"" }; });
+  $("#chartCount").innerHTML=svgBars(countData,{});
+
+  const buckets=[0,0,0,0,0,0], blabels=["0-4","4-8","8-12","12-16","16-20","20-24"];
+  ss.forEach(s=>s.lapses.forEach(l=>{ const h=new Date(l.start).getHours(); buckets[Math.floor(h/4)]++; }));
+  $("#chartHour").innerHTML=svgBars(buckets.map((v,i)=>({ value:v, color:"var(--amber)", label:blabels[i] })),{});
+
+  renderHistory();
+}
+function renderHistory(){
+  const ss=[...store.sessions].reverse();
+  $("#histCount").textContent=store.sessions.length+"件";
+  const wrap=$("#histList"); wrap.innerHTML="";
+  ss.slice(0,30).forEach(s=>{
+    const d=new Date(s.startedAt);
+    const when=(d.getMonth()+1)+"/"+d.getDate()+" "+pad(d.getHours())+":"+pad(d.getMinutes());
+    const sub=`${Math.round(s.plannedSec/60)}分 · 脱線${s.lapseCount}回 ${s.totalLapseSec>0?"("+mmss(s.totalLapseSec)+")":""}${s.tag?" · #"+s.tag:""}`;
+    const row=document.createElement("div"); row.className="hrow";
+    row.innerHTML=`<span class="hdot" style="background:${rateColor(s.enduranceRate)}"></span><div class="hmain"><div class="t">${when}</div><div class="s">${sub}</div></div><div class="hrate" style="color:${rateColor(s.enduranceRate)}">${s.enduranceRate}%</div>`;
+    wrap.appendChild(row);
+  });
+}
+$("#clearBtn").addEventListener("click",()=>{
+  if(confirm("すべてのセッション記録を消去します。元に戻せません。")){ store.sessions=[]; save(); renderStats(); toast("記録を消去しました"); }
+});
+
+/* ---- backup: export / import ---- */
+function exportFilename(){ const d=new Date(); return `focus-keeper-backup-${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}.json`; }
+$("#exportBtn").addEventListener("click",()=>{
+  $("#exportText").value=JSON.stringify(store,null,2);
+  $("#exportModal").classList.add("show");
+});
+$("#exportClose").addEventListener("click",()=>$("#exportModal").classList.remove("show"));
+$("#exportCopy").addEventListener("click",async()=>{
+  const txt=$("#exportText").value;
+  try{ await navigator.clipboard.writeText(txt); toast("コピーしました"); }
+  catch(e){
+    const t=$("#exportText"); t.focus(); t.setSelectionRange(0,t.value.length);
+    try{ document.execCommand("copy"); toast("コピーしました"); }
+    catch(_){ toast("テキストを長押ししてコピーしてください"); }
+  }
+});
+$("#exportShare").addEventListener("click",async()=>{
+  const txt=$("#exportText").value, name=exportFilename();
+  try{
+    const file=new File([txt],name,{type:"application/json"});
+    if(navigator.canShare && navigator.canShare({files:[file]})){ await navigator.share({files:[file],title:name}); return; }
+  }catch(e){}
+  try{
+    const blob=new Blob([txt],{type:"application/json"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a"); a.href=url; a.download=name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1500);
+    toast("書き出しました");
+  }catch(e){ toast("コピーで保存してください"); }
+});
+
+$("#importBtn").addEventListener("click",()=>{
+  $("#importText").value=""; $("#importFile").value=""; $("#importModal").classList.add("show");
+});
+$("#importCancel").addEventListener("click",()=>$("#importModal").classList.remove("show"));
+$("#importFile").addEventListener("change",e=>{
+  const f=e.target.files&&e.target.files[0]; if(!f) return;
+  const r=new FileReader(); r.onload=()=>{ $("#importText").value=r.result; }; r.readAsText(f);
+});
+$("#importDo").addEventListener("click",()=>{
+  const raw=$("#importText").value.trim();
+  if(!raw){ toast("データがありません"); return; }
+  let data; try{ data=JSON.parse(raw); }catch(e){ toast("読み込めませんでした（形式エラー）"); return; }
+  const incoming=Array.isArray(data.sessions)?data.sessions:(Array.isArray(data)?data:null);
+  if(!incoming){ toast("セッションデータが見つかりません"); return; }
+  const byId={}; store.sessions.forEach(s=>{ byId[s.id]=s; });
+  incoming.forEach(s=>{ if(s&&s.id!=null) byId[s.id]=s; });
+  store.sessions=Object.values(byId).sort((a,b)=>a.startedAt-b.startedAt);
+  if(data.settings && typeof data.settings==="object") store.settings=Object.assign({},store.settings,data.settings);
+  save(); $("#importModal").classList.remove("show"); renderStats();
+  toast("復元しました（全"+store.sessions.length+"件）");
+});
+
+/* ---- restore an interrupted session ---- */
+function restoreActive(){
+  const a=store.active; if(!a||!a.phase||a.phase==="done") return false;
+  S={ id:a.id, startedAt:a.startedAt, plannedSec:a.plannedSec, tag:a.tag, lapses:a.lapses||[], focusedSec:a.focusedSec||0, started:!!a.started };
+  phase=a.phase; focusChunkStart=a.focusChunkStart; touchStart=a.touchStart; lastFocusChunk=a.lastFocusChunk||null;
+  enterActiveScreen();
+  if(phase==="focusing" && focusChunkStart!=null){
+    // page is now visible -> credit the screen-off time (consistent with the model)
+    becameVisible();
+  } else {
+    if(phase==="touching"){ touchStart=Date.now(); startVisTick(); }
+    updateActiveUI();
+  }
+  toast("セッションを復元しました");
+  return true;
+}
+
+/* ---- init ---- */
+(function init(){
+  const lastMin=Math.round((store.settings.lastDuration||1500)/60);
+  const pbtn=[...document.querySelectorAll(".preset")].find(p=>parseInt(p.dataset.min,10)===lastMin);
+  if(pbtn){ document.querySelectorAll(".preset").forEach(x=>x.classList.remove("sel")); pbtn.classList.add("sel"); selectedMin=lastMin; }
+  else { selectedMin=lastMin; document.querySelectorAll(".preset").forEach(x=>x.classList.remove("sel")); $("#customMin").value=lastMin; }
+  renderTagChips(); renderStats();
+  restoreActive();
+})();
+</script>
+</body>
+</html>
