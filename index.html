@@ -97,6 +97,8 @@
   .reclass{display:block;width:100%;margin-top:12px;padding:13px;border-radius:13px;font-size:13px;font-weight:700;color:var(--amber);background:rgba(232,162,75,.1);border:1px solid var(--amber-dim)}
   .reclass small{display:block;font-weight:500;color:var(--muted);margin-top:2px}
   .reclass:active{transform:scale(.99)}
+  .finish-btn{display:block;width:100%;margin-top:12px;padding:15px;border-radius:14px;font-size:15px;font-weight:800;color:var(--jade);background:var(--surface);border:1.5px solid var(--jade)}
+  .finish-btn:active{transform:scale(.99);background:var(--surface-2)}
   .abort{display:block;margin:14px auto 0;font-size:13px;color:var(--muted-2);padding:8px 16px;letter-spacing:.05em}
   .abort:active{color:var(--danger)}
 
@@ -231,6 +233,7 @@
         </div>
       </div>
       <button class="reclass" id="reclassBtn" style="display:none">📱 さっきはスマホを見てた<small>直前の集中を脱線として記録します</small></button>
+      <button class="finish-btn" id="finishBtn" style="display:none">✓ 終了して記録する</button>
       <button class="abort" id="abortBtn">セッションを中止</button>
     </div>
 
@@ -448,12 +451,7 @@ function becameVisible(){
   if(phase!=="focusing"||focusChunkStart==null) return;
   const now=Date.now();
   const dur=(now-focusChunkStart)/1000;
-  const need=S.plannedSec-S.focusedSec;
-  if(dur>=need){
-    S.focusedSec=S.plannedSec; focusChunkStart=null; lastFocusChunk=null;
-    finish(); return;
-  }
-  S.focusedSec+=dur;
+  S.focusedSec+=dur;                       // keep accumulating (no cap at target)
   lastFocusChunk={ start:focusChunkStart, dur };
   focusChunkStart=null; phase="touching"; touchStart=now;
   startVisTick(); updateActiveUI(); persistActive();
@@ -475,21 +473,28 @@ function visTick(){
 function updateActiveUI(){
   $("#activeTag").textContent=S.tag?"#"+S.tag:"";
   const remaining=Math.max(0,S.plannedSec-S.focusedSec);
-  $("#bigTime").textContent=mmss(remaining);
+  const over=Math.max(0,S.focusedSec-S.plannedSec);
+  const reached=S.focusedSec>=S.plannedSec;
+  $("#bigTime").textContent=mmss(S.focusedSec);   // 純集中を積み上げ表示（止めるまで増える）
   $("#focusArc").setAttribute("stroke-dashoffset",(RING_C*(1-Math.min(1,S.focusedSec/S.plannedSec))).toFixed(1));
   $("#chipCount").innerHTML=S.lapses.length+"<small>回</small>";
   $("#chipTime").innerHTML=Math.round(S.lapses.reduce((a,l)=>a+l.durationSec,0))+"<small>秒</small>";
+  const subText=reached?("目標達成 ＋"+mmss(over)):("目標まで "+mmss(remaining));
 
   if(phase==="armed"){
     $("#stateLabel").className="state-label state-focus"; $("#stateText").textContent="集中の準備";
-    $("#ringSub").textContent="目標の純集中"; $("#leakTimer").textContent="";
+    $("#ringSub").textContent="目標 "+mmss(S.plannedSec); $("#leakTimer").textContent="";
     $("#cueIco").textContent="📵"; $("#cueTitle").textContent="画面を消すと集中スタート"; $("#cueSub").textContent="スマホをロックしてください";
     $("#reclassBtn").style.display="none";
+    $("#finishBtn").style.display="none";
   } else if(phase==="touching"){
     $("#stateLabel").className="state-label state-touch"; $("#stateText").textContent="画面オン中・集中は一時停止";
-    $("#ringSub").textContent="残りの純集中";
-    $("#cueIco").textContent="📵"; $("#cueTitle").textContent="画面を消すと再開"; $("#cueSub").textContent="ロックすれば緑がまた進みます";
+    $("#ringSub").textContent=subText;
+    $("#cueIco").textContent=reached?"🎉":"📵";
+    $("#cueTitle").textContent=reached?"目標達成！まだ続けられます":"画面を消すと再開";
+    $("#cueSub").textContent=reached?"画面オフで延長／やめるなら下のボタン":"ロックすれば青がまた進みます";
     $("#reclassBtn").style.display=lastFocusChunk?"block":"none";
+    $("#finishBtn").style.display="block";
   }
 }
 
@@ -502,12 +507,15 @@ $("#reclassBtn").addEventListener("click",()=>{
   toast("直前の時間を脱線に変えました");
 });
 
+/* finish & save the session with all accumulated focus (incl. overtime) */
+$("#finishBtn").addEventListener("click",()=>{ if(S) finish(); });
+
 /* ---- finish ---- */
 function finish(){
   if(phase==="done") return;
   stopVisTick(); phase="done";
   const totalLapse=S.lapses.reduce((a,l)=>a+l.durationSec,0);
-  const focused=Math.min(S.plannedSec,Math.round(S.focusedSec));
+  const focused=Math.round(S.focusedSec);
   const denom=focused+totalLapse;
   const rate=denom>0?Math.round(focused/denom*100):100;
   const rec={ id:S.id, startedAt:S.startedAt, plannedSec:S.plannedSec, tag:S.tag,
@@ -529,6 +537,8 @@ function showComplete(rec){
   else if(r>=80) msg="ほぼ画面を消したまま集中をキープ。起こしても短くまとめられています。";
   else if(r>=50) msg="半分以上は画面オフを守れています。次は起こす回数を1回減らすことだけ狙いましょう。";
   else msg="今回は何度も画面に手が伸びましたね。目標を短く設定して、勝てる長さから立て直すのがおすすめです。";
+  const over=rec.focusedSec-rec.plannedSec;
+  if(over>=60) msg="目標を "+mmss(over)+" 上回る集中でした。"+msg;
   $("#doneMsg").textContent=msg;
   renderStats();
 }
@@ -622,7 +632,7 @@ function renderHistory(){
   ss.slice(0,30).forEach(s=>{
     const d=new Date(s.startedAt);
     const when=(d.getMonth()+1)+"/"+d.getDate()+" "+pad(d.getHours())+":"+pad(d.getMinutes());
-    const sub=`${Math.round(s.plannedSec/60)}分 · 脱線${s.lapseCount}回 ${s.totalLapseSec>0?"("+mmss(s.totalLapseSec)+")":""}${s.tag?" · #"+s.tag:""}`;
+    const sub=`純集中${mmss(s.focusedSec)} · 脱線${s.lapseCount}回 ${s.totalLapseSec>0?"("+mmss(s.totalLapseSec)+")":""}${s.tag?" · #"+s.tag:""}`;
     const row=document.createElement("div"); row.className="hrow";
     row.innerHTML=`<span class="hdot" style="background:${rateColor(s.enduranceRate)}"></span><div class="hmain"><div class="t">${when}</div><div class="s">${sub}</div></div><div class="hrate" style="color:${rateColor(s.enduranceRate)}">${s.enduranceRate}%</div>`;
     wrap.appendChild(row);
