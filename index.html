@@ -136,6 +136,11 @@
   .hmain .s{font-size:11px;color:var(--muted-2);margin-top:1px}
   .hrate{font-size:18px;font-weight:800;font-variant-numeric:tabular-nums}
   .empty{text-align:center;color:var(--muted-2);font-size:13px;padding:40px 20px;line-height:1.8}
+  .hist-filter{display:flex;gap:8px;overflow-x:auto;padding:4px 0 12px;-webkit-overflow-scrolling:touch}
+  .hist-filter::-webkit-scrollbar{display:none}
+  .hf-chip{flex:none;font-size:12px;padding:7px 13px;border-radius:999px;background:var(--surface-2);border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+  .hf-chip.on{background:var(--jade);border-color:var(--jade);color:#fff}
+  .hist-summary{font-size:12px;color:var(--muted);padding:0 2px 10px;margin-bottom:4px;border-bottom:1px solid var(--line)}
   details.settings{margin-top:18px;border:1px solid var(--line);border-radius:14px;background:var(--surface);overflow:hidden}
   details.settings summary{padding:15px 16px;font-size:13px;font-weight:700;color:var(--muted);list-style:none;cursor:pointer;display:flex;justify-content:space-between}
   details.settings summary::-webkit-details-marker{display:none}
@@ -263,7 +268,7 @@
       <div class="card"><h3>日別の我慢できた率<span>直近14日</span></h3><div class="chart" id="chartRate"></div></div>
       <div class="card"><h3>日別の脱線回数<span>直近14日</span></h3><div class="chart" id="chartCount"></div></div>
       <div class="card"><h3>時間帯別の脱線<span>弱い時間を知る</span></h3><div class="chart" id="chartHour"></div></div>
-      <div class="card"><h3>履歴<span id="histCount"></span></h3><div class="hist" id="histList"></div></div>
+      <div class="card"><h3>履歴<span id="histCount"></span></h3><div class="hist-filter" id="histFilter"></div><div class="hist-summary" id="histSummary" style="display:none"></div><div class="hist" id="histList"></div></div>
     </div>
     <div id="noData" class="empty" style="display:none">
       まだ記録がありません。<br>1セッション走り切ると、ここに我慢率の推移が積み上がります。
@@ -623,13 +628,57 @@ function renderStats(){
   ss.forEach(s=>s.lapses.forEach(l=>{ const h=new Date(l.start).getHours(); buckets[Math.floor(h/4)]++; }));
   $("#chartHour").innerHTML=svgBars(buckets.map((v,i)=>({ value:v, color:"var(--amber)", label:blabels[i] })),{});
 
+  renderHistFilter();
   renderHistory();
 }
+let histTag=null; // null=すべて / "__none__"=タグなし / それ以外=該当タグ
+function tagList(){
+  const set=[];
+  store.sessions.forEach(s=>{ if(s.tag && !set.includes(s.tag)) set.push(s.tag); });
+  return set;
+}
+function filteredSessions(){
+  return store.sessions.filter(s=>{
+    if(histTag===null) return true;
+    if(histTag==="__none__") return !s.tag;
+    return s.tag===histTag;
+  });
+}
+function renderHistFilter(){
+  const wrap=$("#histFilter"); if(!wrap) return;
+  const tags=tagList();
+  const hasUntagged=store.sessions.some(s=>!s.tag);
+  if(histTag && histTag!=="__none__" && !tags.includes(histTag)) histTag=null;
+  if(histTag==="__none__" && !hasUntagged) histTag=null;
+  const chips=[{k:null,label:"すべて"}];
+  tags.forEach(t=>chips.push({k:t,label:"#"+t}));
+  if(hasUntagged) chips.push({k:"__none__",label:"タグなし"});
+  wrap.innerHTML="";
+  // フィルターが「すべて」のみなら非表示にしてスッキリ
+  if(chips.length<=1){ return; }
+  chips.forEach(c=>{
+    const b=document.createElement("button");
+    b.className="hf-chip"+(histTag===c.k?" on":"");
+    b.textContent=c.label;
+    b.onclick=()=>{ histTag=c.k; renderHistFilter(); renderHistory(); };
+    wrap.appendChild(b);
+  });
+}
 function renderHistory(){
-  const ss=[...store.sessions].reverse();
-  $("#histCount").textContent=store.sessions.length+"件";
+  const fs=filteredSessions();
+  const ss=[...fs].reverse();
+  $("#histCount").textContent=fs.length+"件";
+  const sum=$("#histSummary");
+  if(histTag!==null && fs.length){
+    const f=fs.reduce((a,s)=>a+s.focusedSec,0);
+    const l=fs.reduce((a,s)=>a+s.totalLapseSec,0);
+    const rate=Math.round(f/Math.max(1,f+l)*100);
+    sum.style.display="block";
+    sum.innerHTML=`<b style="color:${rateColor(rate)}">平均我慢率 ${rate}%</b> ・ 累計純集中 ${humanDur(f)} ・ ${fs.length}件`;
+  } else { sum.style.display="none"; }
   const wrap=$("#histList"); wrap.innerHTML="";
-  ss.slice(0,30).forEach(s=>{
+  if(!ss.length){ wrap.innerHTML='<div class="empty" style="padding:24px 10px">このタグの記録はまだありません</div>'; return; }
+  ss.slice(0,50).forEach(s=>{
     const d=new Date(s.startedAt);
     const when=(d.getMonth()+1)+"/"+d.getDate()+" "+pad(d.getHours())+":"+pad(d.getMinutes());
     const sub=`純集中${mmss(s.focusedSec)} · 脱線${s.lapseCount}回 ${s.totalLapseSec>0?"("+mmss(s.totalLapseSec)+")":""}${s.tag?" · #"+s.tag:""}`;
