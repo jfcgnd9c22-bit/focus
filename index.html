@@ -129,6 +129,8 @@
   .legend i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px;vertical-align:-1px}
   .hist{margin-top:6px}
   .hrow{display:flex;align-items:center;gap:12px;padding:13px 2px;border-bottom:1px solid var(--line)}
+  .hrow:active{background:var(--surface-2)}
+  .hist-hint{font-size:11px;color:var(--muted-2);padding:0 2px 8px}
   .hrow:last-child{border-bottom:none}
   .hdot{width:10px;height:10px;border-radius:50%;flex:none}
   .hmain{flex:1;min-width:0}
@@ -268,7 +270,7 @@
       <div class="card"><h3>日別の我慢できた率<span>直近14日</span></h3><div class="chart" id="chartRate"></div></div>
       <div class="card"><h3>日別の脱線回数<span>直近14日</span></h3><div class="chart" id="chartCount"></div></div>
       <div class="card"><h3>時間帯別の脱線<span>弱い時間を知る</span></h3><div class="chart" id="chartHour"></div></div>
-      <div class="card"><h3>履歴<span id="histCount"></span></h3><div class="hist-filter" id="histFilter"></div><div class="hist-summary" id="histSummary" style="display:none"></div><div class="hist" id="histList"></div></div>
+      <div class="card"><h3>履歴<span id="histCount"></span></h3><div class="hist-filter" id="histFilter"></div><div class="hist-summary" id="histSummary" style="display:none"></div><div class="hist-hint">行をタップするとタグを変更できます</div><div class="hist" id="histList"></div></div>
     </div>
     <div id="noData" class="empty" style="display:none">
       まだ記録がありません。<br>1セッション走り切ると、ここに我慢率の推移が積み上がります。
@@ -333,6 +335,18 @@
     <div class="modal-actions" style="margin-top:14px">
       <button class="mbtn ghost" id="importCancel">キャンセル</button>
       <button class="mbtn go" id="importDo">読み込む</button>
+    </div>
+  </div>
+</div>
+<div class="modal-bg" id="editTagModal">
+  <div class="modal">
+    <h2>タグを変更</h2>
+    <p id="editTagInfo"></p>
+    <input id="editTagInput" class="tag-input" type="text" maxlength="20" placeholder="タグを入力（空欄でタグなし）" style="padding-right:14px;margin-top:6px">
+    <div id="editTagChips" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px"></div>
+    <div class="modal-actions" style="margin-top:18px">
+      <button class="mbtn ghost" id="editTagCancel">キャンセル</button>
+      <button class="mbtn go" id="editTagSave">保存</button>
     </div>
   </div>
 </div>
@@ -682,11 +696,45 @@ function renderHistory(){
     const d=new Date(s.startedAt);
     const when=(d.getMonth()+1)+"/"+d.getDate()+" "+pad(d.getHours())+":"+pad(d.getMinutes());
     const sub=`純集中${mmss(s.focusedSec)} · 脱線${s.lapseCount}回 ${s.totalLapseSec>0?"("+mmss(s.totalLapseSec)+")":""}${s.tag?" · #"+s.tag:""}`;
-    const row=document.createElement("div"); row.className="hrow";
+    const row=document.createElement("div"); row.className="hrow"; row.style.cursor="pointer";
     row.innerHTML=`<span class="hdot" style="background:${rateColor(s.enduranceRate)}"></span><div class="hmain"><div class="t">${when}</div><div class="s">${sub}</div></div><div class="hrate" style="color:${rateColor(s.enduranceRate)}">${s.enduranceRate}%</div>`;
+    row.onclick=()=>openEditTag(s.id);
     wrap.appendChild(row);
   });
 }
+/* ---- edit a session's tag from history ---- */
+let editingSessionId=null;
+function openEditTag(id){
+  const s=store.sessions.find(x=>x.id===id); if(!s) return;
+  editingSessionId=id;
+  const d=new Date(s.startedAt);
+  $("#editTagInfo").textContent=`${d.getMonth()+1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())} ・ 純集中${mmss(s.focusedSec)}`;
+  $("#editTagInput").value=s.tag||"";
+  const wrap=$("#editTagChips"); wrap.innerHTML="";
+  tagList().forEach(t=>{
+    const b=document.createElement("button"); b.type="button"; b.className="hf-chip"; b.textContent="#"+t;
+    b.onclick=()=>{ $("#editTagInput").value=t; }; wrap.appendChild(b);
+  });
+  const none=document.createElement("button"); none.type="button"; none.className="hf-chip"; none.textContent="タグなし";
+  none.onclick=()=>{ $("#editTagInput").value=""; }; wrap.appendChild(none);
+  $("#editTagModal").classList.add("show");
+}
+$("#editTagCancel").addEventListener("click",()=>{ editingSessionId=null; $("#editTagModal").classList.remove("show"); });
+$("#editTagSave").addEventListener("click",()=>{
+  if(editingSessionId==null){ $("#editTagModal").classList.remove("show"); return; }
+  const s=store.sessions.find(x=>x.id===editingSessionId);
+  if(s){
+    const t=$("#editTagInput").value.trim().slice(0,20);
+    s.tag=t;
+    if(t) store.settings.lastTags=[t,...(store.settings.lastTags||[]).filter(x=>x!==t)].slice(0,20);
+    save();
+  }
+  editingSessionId=null;
+  $("#editTagModal").classList.remove("show");
+  renderStats();
+  toast("タグを変更しました");
+});
+
 $("#clearBtn").addEventListener("click",()=>{
   if(confirm("すべてのセッション記録を消去します。元に戻せません。")){ store.sessions=[]; save(); renderStats(); toast("記録を消去しました"); }
 });
